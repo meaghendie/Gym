@@ -1,0 +1,283 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#111827">
+<title>Gym Tracker</title>
+<style>
+:root{--bg:#f3f4f6;--card:#fff;--tx:#111827;--mut:#6b7280;--bd:#e5e7eb;--ac:#2563eb;--ac2:#dbeafe;--ok:#16a34a;--bad:#dc2626}
+@media(prefers-color-scheme:dark){:root{--bg:#0b1020;--card:#161c30;--tx:#f3f4f6;--mut:#9ca3af;--bd:#2a3350;--ac:#60a5fa;--ac2:#1e2d52;--ok:#4ade80;--bad:#f87171}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font:16px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;padding-bottom:80px}
+header{position:sticky;top:0;z-index:5;background:var(--bg);padding:env(safe-area-inset-top) 0 0}
+.people{display:flex;gap:6px;padding:8px 10px 0}
+.people button{flex:1;padding:12px;border:0;border-radius:12px 12px 0 0;background:var(--card);color:var(--mut);font-size:16px;font-weight:600}
+.people button.on{background:var(--ac);color:#fff}
+.sub{display:flex;background:var(--card);border-bottom:1px solid var(--bd);margin:0 10px}
+.sub button{flex:1;padding:10px 4px;border:0;background:none;color:var(--mut);font-size:14px;font-weight:600;border-bottom:3px solid transparent}
+.sub button.on{color:var(--ac);border-color:var(--ac)}
+main{padding:10px;max-width:640px;margin:0 auto}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:12px;margin-bottom:12px}
+.row{display:flex;align-items:center;gap:8px}.sp{flex:1}
+.mut{color:var(--mut);font-size:13px}
+button{font:inherit}
+.btn{border:1px solid var(--bd);background:var(--card);color:var(--tx);border-radius:10px;padding:9px 12px;font-weight:600}
+.btn.p{background:var(--ac);border-color:var(--ac);color:#fff}
+.btn.s{padding:5px 9px;font-size:13px}
+.btn.x{color:var(--bad)}
+.week{display:flex;gap:4px;margin:8px 0}
+.week button{flex:1;border:1px solid var(--bd);background:var(--card);color:var(--tx);border-radius:10px;padding:6px 0;line-height:1.2}
+.week button.on{background:var(--ac);color:#fff;border-color:var(--ac)}
+.week small{display:block;font-size:11px;opacity:.75}
+.dot{display:block;height:6px;font-size:8px;line-height:6px;color:var(--ac)}
+.week .on .dot{color:#fff}.dot.ok{color:var(--ok)}
+input,textarea,select{font:inherit;color:var(--tx);background:var(--bg);border:1px solid var(--bd);border-radius:8px;padding:8px;width:100%}
+textarea{resize:vertical;min-height:44px;margin-top:6px}
+table.sets{width:100%;border-collapse:collapse;margin-top:6px}
+.sets th{font-size:12px;color:var(--mut);text-align:left;font-weight:600;padding:0 4px 2px}
+.sets td{padding:2px 3px}.sets td:first-child{width:28px;color:var(--mut);font-size:13px}
+.sets input{text-align:center;padding:8px 2px}
+.ex{border-top:1px solid var(--bd);padding-top:10px;margin-top:10px}
+.ex:first-of-type{border:0;margin-top:4px;padding-top:0}
+.done{opacity:.85;border-left:4px solid var(--ok)}
+.pick{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+h3{margin:4px 0 8px;font-size:17px}
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}
+.chip{border:1px solid var(--bd);background:var(--card);color:var(--tx);border-radius:99px;padding:6px 12px;font-size:14px}
+.chip.on{background:var(--ac);color:#fff;border-color:var(--ac)}
+.up{color:var(--ok)}.dn{color:var(--bad)}
+.stat{display:flex;gap:8px;margin:8px 0}.stat div{flex:1;background:var(--bg);border-radius:10px;padding:8px;text-align:center}
+.stat b{display:block;font-size:18px}
+svg{width:100%;height:auto;display:block}
+.hist{width:100%;border-collapse:collapse;font-size:14px}
+.hist td,.hist th{padding:5px 4px;border-top:1px solid var(--bd);text-align:left;vertical-align:top}
+.note{border-top:1px solid var(--bd);padding:8px 0}
+.note:first-child{border:0}
+</style>
+</head>
+<body>
+<header><div class="people" id="people"></div><div class="sub" id="sub"></div></header>
+<main id="app"></main>
+
+<script>
+const KEY='gymtracker.v1';
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const uid=()=>Math.random().toString(36).slice(2,10);
+const ymd=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+const parse=s=>{const[a,b,c]=s.split('-').map(Number);return new Date(a,b-1,c)};
+const today=()=>ymd(new Date());
+const monday=s=>{const d=parse(s);d.setDate(d.getDate()-((d.getDay()+6)%7));return d};
+const addDays=(d,n)=>{const x=new Date(d);x.setDate(x.getDate()+n);return x};
+const fmt=s=>parse(s).toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'});
+const short=s=>parse(s).toLocaleDateString(undefined,{month:'short',day:'numeric'});
+const mkPerson=n=>({name:n,unit:'kg',templates:[],logs:[],notes:[]});
+function load(){
+  try{const s=JSON.parse(localStorage.getItem(KEY));if(s&&s.people)return s}catch(e){}
+  return{ui:{p:0,tab:'log',date:today(),ex:'',metric:'w',adding:false},people:[mkPerson('Person 1'),mkPerson('Person 2')]};
+}
+let S=load();
+const save=()=>{try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}};
+const P=()=>S.people[S.ui.p];
+const findLog=id=>P().logs.find(l=>l.id===id);
+const key=n=>n.trim().toLowerCase();
+const hasData=s=>s.r!==''&&s.r!=null||s.w!==''&&s.w!=null;
+const setTxt=s=>`${s.r||'?'}×${s.w||'BW'}${s.rpe?' @'+s.rpe:''}`;
+
+// most recent earlier session of an exercise, for hints
+function lastFor(name,log){
+  const k=key(name);
+  const c=P().logs.filter(l=>l.id!==log.id&&l.date<=log.date).sort((a,b)=>b.date.localeCompare(a.date));
+  for(const l of c){const e=l.exercises.find(e=>key(e.name)===k&&e.sets.some(hasData));if(e)return e.sets.filter(hasData)}
+  return null;
+}
+function newWorkout(tid,date){
+  const p=P(),t=p.templates.find(t=>t.id===tid);
+  const log={id:uid(),date,tid,name:t.name,done:false,comment:'',exercises:[]};
+  log.exercises=t.exercises.map(n=>{const e={name:n,comment:'',sets:[]};const l=lastFor(n,log);const c=l?l.length:3;for(let i=0;i<c;i++)e.sets.push({r:'',w:'',rpe:''});return e});
+  p.logs.push(log);
+}
+
+/* ---------- rendering ---------- */
+function render(){
+  const u=S.ui;
+  $('#people').innerHTML=S.people.map((p,i)=>`<button data-act="person" data-i="${i}" class="${i==u.p?'on':''}">${esc(p.name)}</button>`).join('');
+  const tabs=[['log','Log'],['tpl','Workouts'],['sum','Summary'],['notes','Notes'],['set','⚙']];
+  $('#sub').innerHTML=tabs.map(([k,l])=>`<button data-act="tab" data-t="${k}" class="${u.tab==k?'on':''}">${l}</button>`).join('');
+  $('#app').innerHTML=({log:viewLog,tpl:viewTpl,sum:viewSum,notes:viewNotes,set:viewSet})[u.tab]();
+}
+
+function viewLog(){
+  const p=P(),u=S.ui,mon=monday(u.date);
+  let days='';
+  for(let i=0;i<7;i++){
+    const d=ymd(addDays(mon,i)),ls=p.logs.filter(l=>l.date===d);
+    const all=ls.length&&ls.every(l=>l.done);
+    days+=`<button data-act="day" data-d="${d}" class="${d==u.date?'on':''}">${parse(d).toLocaleDateString(undefined,{weekday:'short'})}<small>${parse(d).getDate()}</small><span class="dot ${all?'ok':''}">${ls.length?'●':''}</span></button>`;
+  }
+  const ls=p.logs.filter(l=>l.date===u.date);
+  let h=`<div class="row"><button class="btn s" data-act="wk" data-n="-7">‹</button><div class="sp" style="text-align:center"><b>${fmt(u.date)}${u.date==today()?' (today)':''}</b></div><button class="btn s" data-act="wk" data-n="7">›</button></div>
+  <div class="week">${days}</div>
+  <div class="row" style="margin-bottom:10px"><span class="mut">Jump to</span><input type="date" value="${u.date}" data-f="jump" style="width:auto;flex:1"><button class="btn s" data-act="today">Today</button></div>`;
+  h+=ls.map(wCard).join('');
+  if(u.adding){
+    h+=`<div class="card"><b>Add which workout to ${fmt(u.date)}?</b><div class="pick">${p.templates.length?p.templates.map(t=>`<button class="btn p" data-act="addw" data-tid="${t.id}">${esc(t.name)}</button>`).join(''):'<span class="mut">No workouts yet — create one in the Workouts tab.</span>'}<button class="btn" data-act="adhoc">Blank workout</button><button class="btn" data-act="cancel">Cancel</button></div></div>`;
+  }else h+=`<button class="btn p" style="width:100%" data-act="adding">+ Add workout to this day</button>`;
+  return h;
+}
+function wCard(l){
+  const p=P();
+  return `<div class="card ${l.done?'done':''}"><div class="row"><h3 class="sp" style="margin:0">${esc(l.name)}</h3>
+  <label class="row mut"><input type="checkbox" style="width:22px;height:22px" data-f="done" data-w="${l.id}" ${l.done?'checked':''}>Done</label>
+  <button class="btn s x" data-act="delw" data-w="${l.id}">✕</button></div>
+  ${l.exercises.map((e,ei)=>{
+    const last=lastFor(e.name,l);
+    return `<div class="ex"><div class="row"><b class="sp">${esc(e.name)}</b><button class="btn s x" data-act="dele" data-w="${l.id}" data-e="${ei}">Remove</button></div>
+    ${last?`<div class="mut">Last: ${last.map(setTxt).join(' · ')}</div>`:''}
+    <table class="sets"><tr><th></th><th>Reps</th><th>Weight (${p.unit})</th><th>RPE</th><th></th></tr>
+    ${e.sets.map((s,si)=>{const ph=last&&last[si]||{};return `<tr><td>${si+1}</td>
+      <td><input inputmode="numeric" data-f="r" data-w="${l.id}" data-e="${ei}" data-s="${si}" value="${esc(s.r)}" placeholder="${esc(ph.r||'')}"></td>
+      <td><input inputmode="decimal" data-f="w" data-w="${l.id}" data-e="${ei}" data-s="${si}" value="${esc(s.w)}" placeholder="${esc(ph.w||'')}"></td>
+      <td><input inputmode="decimal" data-f="rpe" data-w="${l.id}" data-e="${ei}" data-s="${si}" value="${esc(s.rpe)}" placeholder="${esc(ph.rpe||'')}"></td>
+      <td><button class="btn s x" data-act="dels" data-w="${l.id}" data-e="${ei}" data-s="${si}">−</button></td></tr>`}).join('')}</table>
+    <button class="btn s" data-act="adds" data-w="${l.id}" data-e="${ei}">+ Set</button>
+    <textarea rows="1" placeholder="Comment (how it felt, notes…)" data-f="ec" data-w="${l.id}" data-e="${ei}">${esc(e.comment)}</textarea></div>`}).join('')}
+  <div style="margin-top:10px"><button class="btn s" data-act="adde" data-w="${l.id}">+ Exercise</button></div>
+  <textarea rows="2" placeholder="Overall workout comment" data-f="wc" data-w="${l.id}">${esc(l.comment)}</textarea></div>`;
+}
+
+function viewTpl(){
+  const p=P();
+  return `<p class="mut">Create your workouts (A, B, C…) here, then add them to any day in the Log tab.</p>`+
+  p.templates.map(t=>`<div class="card"><div class="row"><input data-f="tname" data-t="${t.id}" value="${esc(t.name)}" style="font-weight:700"><button class="btn s x" data-act="deltpl" data-t="${t.id}">Delete</button></div>
+  ${t.exercises.map((e,i)=>`<div class="row note"><span class="sp">${esc(e)}</span><button class="btn s x" data-act="rmex" data-t="${t.id}" data-i="${i}">✕</button></div>`).join('')||'<div class="mut" style="margin:8px 0">No exercises yet</div>'}
+  <button class="btn s" data-act="addex" data-t="${t.id}">+ Exercise</button></div>`).join('')+
+  `<button class="btn p" style="width:100%" data-act="newtpl">+ New workout</button>`;
+}
+
+function exList(){
+  const m={};
+  P().logs.forEach(l=>l.exercises.forEach(e=>{if(e.sets.some(hasData)){const k=key(e.name);m[k]=m[k]||e.name}}));
+  return Object.entries(m).sort((a,b)=>a[1].localeCompare(b[1]));
+}
+const METRICS={
+  w:{l:'Top weight',f:ss=>Math.max(...ss.map(s=>+s.w||0)),d:1},
+  r:{l:'Avg reps/set',f:ss=>avg(ss.map(s=>+s.r||0)),d:1},
+  e:{l:'Avg RPE',f:ss=>{const x=ss.filter(s=>s.rpe!=='').map(s=>+s.rpe);return x.length?avg(x):null},d:1,lowerBetter:true},
+  v:{l:'Volume',f:ss=>ss.reduce((a,s)=>a+(+s.r||0)*(+s.w||0),0),d:0}
+};
+const avg=a=>a.reduce((x,y)=>x+y,0)/a.length;
+function viewSum(){
+  const p=P(),u=S.ui,list=exList();
+  const done=p.logs.filter(l=>l.done);
+  const mon=ymd(monday(today()));
+  let h=`<div class="card"><div class="stat"><div><b>${done.filter(l=>l.date>=mon).length}</b><span class="mut">this week</span></div><div><b>${done.filter(l=>l.date.slice(0,7)==today().slice(0,7)).length}</b><span class="mut">this month</span></div><div><b>${done.length}</b><span class="mut">total done</span></div></div></div>`;
+  if(!list.length)return h+`<div class="card mut">Log some reps and weights to see your progress here.</div>`;
+  if(!list.some(x=>x[0]==u.ex))u.ex=list[0][0];
+  h+=`<div class="card"><select data-f="exsel">${list.map(([k,n])=>`<option value="${esc(k)}" ${k==u.ex?'selected':''}>${esc(n)}</option>`).join('')}</select>
+  <div class="chips">${Object.entries(METRICS).map(([k,m])=>`<button class="chip ${u.metric==k?'on':''}" data-act="metric" data-m="${k}">${m.l}</button>`).join('')}</div>`;
+  const sess=[];
+  p.logs.slice().sort((a,b)=>a.date.localeCompare(b.date)).forEach(l=>l.exercises.forEach(e=>{
+    if(key(e.name)==u.ex){const ss=e.sets.filter(hasData);if(ss.length)sess.push({date:l.date,ss,c:e.comment})}}));
+  const M=METRICS[u.metric],pts=sess.map(s=>({d:s.date,v:M.f(s.ss)})).filter(x=>x.v!=null&&isFinite(x.v));
+  const unit=u.metric=='w'?p.unit:u.metric=='v'?p.unit:'';
+  h+=chart(pts,M.d);
+  if(pts.length){
+    const last=pts.at(-1).v,first=pts[0].v,prev=pts.length>1?pts.at(-2).v:null;
+    const dl=(a,b)=>{if(a==null)return'–';const x=b-a,good=M.lowerBetter?x<0:x>0;const c=x==0?'':good?'up':'dn';return `<span class="${c}">${x>0?'▲ +':x<0?'▼ ':'= '}${x?x.toFixed(M.d):''}</span>`};
+    h+=`<div class="stat"><div><b>${last.toFixed(M.d)}${unit?' '+unit:''}</b><span class="mut">latest</span></div><div><b>${dl(prev,last)}</b><span class="mut">vs previous</span></div><div><b>${pts.length>1?dl(first,last):'–'}</b><span class="mut">since first</span></div></div>`;
+  }
+  h+=`</div><div class="card"><h3>History</h3><table class="hist"><tr><th>Date</th><th>Sets (reps×${p.unit} @RPE)</th></tr>${sess.slice().reverse().map(s=>`<tr><td>${short(s.date)}</td><td>${s.ss.map(setTxt).join(' · ')}${s.c?`<div class="mut">${esc(s.c)}</div>`:''}</td></tr>`).join('')}</table></div>`;
+  return h;
+}
+function chart(pts,d){
+  if(!pts.length)return '<div class="mut">No data for this metric yet.</div>';
+  const W=320,H=150,L=34,R=10,T=10,B=24;
+  const vs=pts.map(x=>x.v);let lo=Math.min(...vs),hi=Math.max(...vs);if(lo==hi){lo-=1;hi+=1}
+  const pad=(hi-lo)*.1;lo-=pad;hi+=pad;
+  const X=i=>pts.length==1?(L+W-R)/2:L+i*(W-L-R)/(pts.length-1),Y=v=>T+(hi-v)/(hi-lo)*(H-T-B);
+  let s=`<svg viewBox="0 0 ${W} ${H}" role="img">`;
+  for(let i=0;i<=3;i++){const v=lo+(hi-lo)*i/3,y=Y(v);s+=`<line x1="${L}" x2="${W-R}" y1="${y}" y2="${y}" stroke="var(--bd)"/><text x="${L-4}" y="${y+4}" font-size="10" fill="var(--mut)" text-anchor="end">${v.toFixed(d)}</text>`}
+  s+=`<polyline fill="none" stroke="var(--ac)" stroke-width="2.5" points="${pts.map((p,i)=>X(i)+','+Y(p.v)).join(' ')}"/>`;
+  pts.forEach((p,i)=>{s+=`<circle cx="${X(i)}" cy="${Y(p.v)}" r="4" fill="var(--ac)"/>`});
+  s+=`<text x="${X(0)}" y="${H-6}" font-size="10" fill="var(--mut)" text-anchor="${pts.length==1?'middle':'start'}">${short(pts[0].d)}</text>`;
+  if(pts.length>1)s+=`<text x="${X(pts.length-1)}" y="${H-6}" font-size="10" fill="var(--mut)" text-anchor="end">${short(pts.at(-1).d)}</text>`;
+  return s+'</svg>';
+}
+
+function viewNotes(){
+  const p=P();
+  return `<div class="card"><textarea id="newnote" rows="3" placeholder="General comment (sleep, injuries, goals, bodyweight…)"></textarea><div style="margin-top:8px"><button class="btn p" data-act="addnote">Add note</button></div></div>
+  <div class="card">${p.notes.length?p.notes.slice().sort((a,b)=>b.ts-a.ts).map(n=>`<div class="note"><div class="row"><span class="mut sp">${new Date(n.ts).toLocaleString()}</span><button class="btn s x" data-act="delnote" data-id="${n.id}">✕</button></div>${esc(n.text).replace(/\n/g,'<br>')}</div>`).join(''):'<span class="mut">No notes yet.</span>'}</div>`;
+}
+
+function viewSet(){
+  const p=P();
+  return `<div class="card"><h3>${esc(p.name)} settings</h3>
+  <div class="row"><button class="btn" data-act="rename">Rename tab</button><button class="btn" data-act="unit">Units: ${p.unit} (tap to switch)</button></div></div>
+  <div class="card"><h3>Backup</h3><p class="mut">Data is stored only in this browser on this device. Export a backup now and then, or to move data to another device.</p>
+  <div class="row"><button class="btn" data-act="export">Export backup</button><label class="btn" style="margin:0">Import<input type="file" accept=".json" data-f="import" hidden></label></div></div>`;
+}
+
+/* ---------- events ---------- */
+document.addEventListener('click',e=>{
+  const b=e.target.closest('[data-act]');if(!b)return;
+  const a=b.dataset.act,u=S.ui,p=P(),d=b.dataset;
+  const lg=d.w?findLog(d.w):null;
+  switch(a){
+    case 'person':u.p=+d.i;u.adding=false;break;
+    case 'tab':u.tab=d.t;u.adding=false;break;
+    case 'day':u.date=d.d;u.adding=false;break;
+    case 'wk':u.date=ymd(addDays(parse(u.date),+d.n));u.adding=false;break;
+    case 'today':u.date=today();break;
+    case 'adding':u.adding=true;break;
+    case 'cancel':u.adding=false;break;
+    case 'addw':newWorkout(d.tid,u.date);u.adding=false;break;
+    case 'adhoc':{const n=prompt('Workout name?');if(!n)return;p.logs.push({id:uid(),date:u.date,tid:null,name:n,done:false,comment:'',exercises:[]});u.adding=false;break}
+    case 'delw':if(!confirm('Delete this workout and its logged sets?'))return;p.logs=p.logs.filter(l=>l.id!==d.w);break;
+    case 'dele':if(!confirm('Remove this exercise from the day?'))return;lg.exercises.splice(+d.e,1);break;
+    case 'adde':{const n=prompt('Exercise name?');if(!n)return;lg.exercises.push({name:n.trim(),comment:'',sets:[{r:'',w:'',rpe:''},{r:'',w:'',rpe:''},{r:'',w:'',rpe:''}]});break}
+    case 'adds':{const ss=lg.exercises[+d.e].sets,l=ss.at(-1)||{};ss.push({r:l.r||'',w:l.w||'',rpe:''});break}
+    case 'dels':lg.exercises[+d.e].sets.splice(+d.s,1);break;
+    case 'newtpl':{const n=prompt('Workout name (e.g. Workout A)?');if(!n)return;p.templates.push({id:uid(),name:n.trim(),exercises:[]});break}
+    case 'deltpl':if(!confirm('Delete this workout template? Already-logged days are kept.'))return;p.templates=p.templates.filter(t=>t.id!==d.t);break;
+    case 'addex':{const n=prompt('Exercise name?');if(!n)return;p.templates.find(t=>t.id===d.t).exercises.push(n.trim());break}
+    case 'rmex':p.templates.find(t=>t.id===d.t).exercises.splice(+d.i,1);break;
+    case 'metric':u.metric=d.m;break;
+    case 'addnote':{const t=$('#newnote').value.trim();if(!t)return;p.notes.push({id:uid(),ts:Date.now(),text:t});break}
+    case 'delnote':p.notes=p.notes.filter(n=>n.id!==d.id);break;
+    case 'rename':{const n=prompt('Name for this tab?',p.name);if(!n)return;p.name=n.trim();break}
+    case 'unit':p.unit=p.unit=='kg'?'lb':'kg';break;
+    case 'export':{
+      const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(S,null,1)],{type:'application/json'}));
+      a.download='gym-tracker-backup-'+today()+'.json';a.click();return}
+  }
+  save();render();
+});
+function onField(e){
+  const t=e.target,f=t.dataset.f;if(!f)return;
+  const lg=t.dataset.w?findLog(t.dataset.w):null;
+  if(f=='r'||f=='w'||f=='rpe')lg.exercises[+t.dataset.e].sets[+t.dataset.s][f]=t.value;
+  else if(f=='ec')lg.exercises[+t.dataset.e].comment=t.value;
+  else if(f=='wc')lg.comment=t.value;
+  else if(f=='tname')P().templates.find(x=>x.id===t.dataset.t).name=t.value;
+  else return;
+  save();
+}
+document.addEventListener('input',onField);
+document.addEventListener('change',e=>{
+  const t=e.target,f=t.dataset.f;if(!f)return;
+  if(f=='done'){findLog(t.dataset.w).done=t.checked;save();render()}
+  else if(f=='jump'){if(t.value){S.ui.date=t.value;S.ui.adding=false;save();render()}}
+  else if(f=='exsel'){S.ui.ex=t.value;save();render()}
+  else if(f=='import'){
+    const file=t.files[0];if(!file)return;
+    const r=new FileReader();r.onload=()=>{try{const x=JSON.parse(r.result);if(!x.people)throw 0;if(!confirm('Replace all current data with this backup?'))return;S=x;save();render()}catch(err){alert('That file is not a valid backup.')}};
+    r.readAsText(file);
+  }
+});
+render();
+</script>
+</body>
+</html>
