@@ -52,6 +52,12 @@ h3{margin:4px 0 8px;font-size:17px}
 svg{width:100%;height:auto;display:block}
 .hist{width:100%;border-collapse:collapse;font-size:14px}
 .hist td,.hist th{padding:5px 4px;border-top:1px solid var(--bd);text-align:left;vertical-align:top}
+.in3{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:8px}
+.in3 label,.in2 label{font-size:12px;color:var(--mut)}
+.in3 input{text-align:center;margin-top:2px}
+.in2{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px}.in2 input{margin-top:2px}
+.rx{margin-top:4px;font-weight:600}
+.ex.xdone b{color:var(--ok)}
 .note{border-top:1px solid var(--bd);padding:8px 0}
 .note:first-child{border:0}
 </style>
@@ -77,7 +83,9 @@ function load(){
   try{const s=JSON.parse(localStorage.getItem(KEY));if(s&&s.people)return s}catch(e){}
   return{ui:{p:0,tab:'log',date:today(),ex:'',metric:'w',adding:false},people:[mkPerson('Person 1'),mkPerson('Person 2')]};
 }
+const mkEx=n=>({name:n,sets:'',reps:'',weight:'',tempo:'',rest:'',cues:''});
 let S=load();
+S.people.forEach(p=>p.templates.forEach(t=>{t.exercises=t.exercises.map(e=>typeof e==='string'?mkEx(e):e)}));
 const save=()=>{try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}};
 const P=()=>S.people[S.ui.p];
 const findLog=id=>P().logs.find(l=>l.id===id);
@@ -95,7 +103,7 @@ function lastFor(name,log){
 function newWorkout(tid,date){
   const p=P(),t=p.templates.find(t=>t.id===tid);
   const log={id:uid(),date,tid,name:t.name,done:false,comment:'',exercises:[]};
-  log.exercises=t.exercises.map(n=>{const e={name:n,comment:'',sets:[]};const l=lastFor(n,log);const c=l?l.length:3;for(let i=0;i<c;i++)e.sets.push({r:'',w:'',rpe:''});return e});
+  log.exercises=t.exercises.map(x=>({name:x.name,rx:{...x},n:parseInt(x.sets)||1,done:false,comment:'',sets:[{r:'',w:'',rpe:''}]}));
   p.logs.push(log);
 }
 
@@ -126,22 +134,21 @@ function viewLog(){
   }else h+=`<button class="btn p" style="width:100%" data-act="adding">+ Add workout to this day</button>`;
   return h;
 }
+const rxLine=x=>x?[x.sets&&x.sets+' sets',x.reps&&x.reps+' reps',x.weight,x.tempo&&'tempo '+x.tempo,x.rest&&'rest '+x.rest].filter(Boolean).join(' · '):'';
 function wCard(l){
-  const p=P();
+  const p=P(),nd=l.exercises.filter(e=>e.done).length;
   return `<div class="card ${l.done?'done':''}"><div class="row"><h3 class="sp" style="margin:0">${esc(l.name)}</h3>
-  <label class="row mut"><input type="checkbox" style="width:22px;height:22px" data-f="done" data-w="${l.id}" ${l.done?'checked':''}>Done</label>
-  <button class="btn s x" data-act="delw" data-w="${l.id}">✕</button></div>
+  <span class="mut">${nd}/${l.exercises.length}</span><button class="btn s x" data-act="delw" data-w="${l.id}">✕</button></div>
   ${l.exercises.map((e,ei)=>{
-    const last=lastFor(e.name,l);
-    return `<div class="ex"><div class="row"><b class="sp">${esc(e.name)}</b><button class="btn s x" data-act="dele" data-w="${l.id}" data-e="${ei}">Remove</button></div>
-    ${last?`<div class="mut">Last: ${last.map(setTxt).join(' · ')}</div>`:''}
-    <table class="sets"><tr><th></th><th>Reps</th><th>Weight (${p.unit})</th><th>RPE</th><th></th></tr>
-    ${e.sets.map((s,si)=>{const ph=last&&last[si]||{};return `<tr><td>${si+1}</td>
-      <td><input inputmode="numeric" data-f="r" data-w="${l.id}" data-e="${ei}" data-s="${si}" value="${esc(s.r)}" placeholder="${esc(ph.r||'')}"></td>
-      <td><input inputmode="decimal" data-f="w" data-w="${l.id}" data-e="${ei}" data-s="${si}" value="${esc(s.w)}" placeholder="${esc(ph.w||'')}"></td>
-      <td><input inputmode="decimal" data-f="rpe" data-w="${l.id}" data-e="${ei}" data-s="${si}" value="${esc(s.rpe)}" placeholder="${esc(ph.rpe||'')}"></td>
-      <td><button class="btn s x" data-act="dels" data-w="${l.id}" data-e="${ei}" data-s="${si}">−</button></td></tr>`}).join('')}</table>
-    <button class="btn s" data-act="adds" data-w="${l.id}" data-e="${ei}">+ Set</button>
+    const last=lastFor(e.name,l),rx=rxLine(e.rx),ph=last&&last[0]||{};
+    const I=(f,si,s,mode,pl)=>`<input inputmode="${mode}" data-f="${f}" data-w="${l.id}" data-e="${ei}" data-s="${si}" value="${esc(s[f])}" placeholder="${esc(pl||'')}">`;
+    return `<div class="ex ${e.done?'xdone':''}"><div class="row"><b class="sp">${esc(e.name)}</b>
+    <button class="btn s ${e.done?'p':''}" data-act="xdone" data-w="${l.id}" data-e="${ei}">${e.done?'✓ Done':'Complete'}</button>
+    <button class="btn s x" data-act="dele" data-w="${l.id}" data-e="${ei}">✕</button></div>
+    ${rx?`<div class="rx">${esc(rx)}</div>`:''}
+    ${e.rx&&e.rx.cues?`<div class="mut">Cues: ${esc(e.rx.cues)}</div>`:''}
+    ${last?`<div class="mut">Last: ${e.n>1&&last.length==1?e.n+' sets · ':''}${last.map(setTxt).join(' · ')}</div>`:''}
+    ${e.sets.map((s,si)=>`<div class="in3"><label>Reps${e.n>1?' / set':''}${I('r',si,s,'numeric',ph.r)}</label><label>Weight (${p.unit})${I('w',si,s,'decimal',ph.w)}</label><label>RPE${I('rpe',si,s,'decimal',ph.rpe)}</label></div>`).join('')}
     <textarea rows="1" placeholder="Comment (how it felt, notes…)" data-f="ec" data-w="${l.id}" data-e="${ei}">${esc(e.comment)}</textarea></div>`}).join('')}
   <div style="margin-top:10px"><button class="btn s" data-act="adde" data-w="${l.id}">+ Exercise</button></div>
   <textarea rows="2" placeholder="Overall workout comment" data-f="wc" data-w="${l.id}">${esc(l.comment)}</textarea></div>`;
@@ -149,9 +156,13 @@ function wCard(l){
 
 function viewTpl(){
   const p=P();
-  return `<p class="mut">Create your workouts (A, B, C…) here, then add them to any day in the Log tab.</p>`+
+  const F=(t,i,k,label,ph,mode)=>`<label>${label}<input ${mode?`inputmode="${mode}"`:''} data-f="rx" data-t="${t.id}" data-i="${i}" data-k="${k}" value="${esc(t.exercises[i][k])}" placeholder="${ph}"></label>`;
+  return `<p class="mut">Create your workouts (A, B, C…) with each exercise's programming, then add them to any day in the Log tab.</p>`+
   p.templates.map(t=>`<div class="card"><div class="row"><input data-f="tname" data-t="${t.id}" value="${esc(t.name)}" style="font-weight:700"><button class="btn s x" data-act="deltpl" data-t="${t.id}">Delete</button></div>
-  ${t.exercises.map((e,i)=>`<div class="row note"><span class="sp">${esc(e)}</span><button class="btn s x" data-act="rmex" data-t="${t.id}" data-i="${i}">✕</button></div>`).join('')||'<div class="mut" style="margin:8px 0">No exercises yet</div>'}
+  ${t.exercises.map((e,i)=>`<div class="ex"><div class="row"><input data-f="exname" data-t="${t.id}" data-i="${i}" value="${esc(e.name)}" style="font-weight:700"><button class="btn s x" data-act="rmex" data-t="${t.id}" data-i="${i}">✕</button></div>
+    <div class="in3">${F(t,i,'sets','Sets','3','numeric')}${F(t,i,'reps','Reps','10-12')}${F(t,i,'weight','Weight','20 lbs')}</div>
+    <div class="in2">${F(t,i,'tempo','Tempo','31x1')}${F(t,i,'rest','Rest','No rest / 60s')}</div>
+    <textarea rows="2" placeholder="Cues" data-f="rx" data-t="${t.id}" data-i="${i}" data-k="cues">${esc(e.cues)}</textarea></div>`).join('')||'<div class="mut" style="margin:8px 0">No exercises yet</div>'}
   <button class="btn s" data-act="addex" data-t="${t.id}">+ Exercise</button></div>`).join('')+
   `<button class="btn p" style="width:100%" data-act="newtpl">+ New workout</button>`;
 }
@@ -165,7 +176,7 @@ const METRICS={
   w:{l:'Top weight',f:ss=>Math.max(...ss.map(s=>+s.w||0)),d:1},
   r:{l:'Avg reps/set',f:ss=>avg(ss.map(s=>+s.r||0)),d:1},
   e:{l:'Avg RPE',f:ss=>{const x=ss.filter(s=>s.rpe!=='').map(s=>+s.rpe);return x.length?avg(x):null},d:1,lowerBetter:true},
-  v:{l:'Volume',f:ss=>ss.reduce((a,s)=>a+(+s.r||0)*(+s.w||0),0),d:0}
+  v:{l:'Volume',f:(ss,n)=>ss.reduce((a,s)=>a+(+s.r||0)*(+s.w||0),0)*(ss.length==1?(n||1):1),d:0}
 };
 const avg=a=>a.reduce((x,y)=>x+y,0)/a.length;
 function viewSum(){
@@ -179,8 +190,8 @@ function viewSum(){
   <div class="chips">${Object.entries(METRICS).map(([k,m])=>`<button class="chip ${u.metric==k?'on':''}" data-act="metric" data-m="${k}">${m.l}</button>`).join('')}</div>`;
   const sess=[];
   p.logs.slice().sort((a,b)=>a.date.localeCompare(b.date)).forEach(l=>l.exercises.forEach(e=>{
-    if(key(e.name)==u.ex){const ss=e.sets.filter(hasData);if(ss.length)sess.push({date:l.date,ss,c:e.comment})}}));
-  const M=METRICS[u.metric],pts=sess.map(s=>({d:s.date,v:M.f(s.ss)})).filter(x=>x.v!=null&&isFinite(x.v));
+    if(key(e.name)==u.ex){const ss=e.sets.filter(hasData);if(ss.length)sess.push({date:l.date,ss,c:e.comment,n:e.n||1})}}));
+  const M=METRICS[u.metric],pts=sess.map(s=>({d:s.date,v:M.f(s.ss,s.n)})).filter(x=>x.v!=null&&isFinite(x.v));
   const unit=u.metric=='w'?p.unit:u.metric=='v'?p.unit:'';
   h+=chart(pts,M.d);
   if(pts.length){
@@ -188,7 +199,7 @@ function viewSum(){
     const dl=(a,b)=>{if(a==null)return'–';const x=b-a,good=M.lowerBetter?x<0:x>0;const c=x==0?'':good?'up':'dn';return `<span class="${c}">${x>0?'▲ +':x<0?'▼ ':'= '}${x?x.toFixed(M.d):''}</span>`};
     h+=`<div class="stat"><div><b>${last.toFixed(M.d)}${unit?' '+unit:''}</b><span class="mut">latest</span></div><div><b>${dl(prev,last)}</b><span class="mut">vs previous</span></div><div><b>${pts.length>1?dl(first,last):'–'}</b><span class="mut">since first</span></div></div>`;
   }
-  h+=`</div><div class="card"><h3>History</h3><table class="hist"><tr><th>Date</th><th>Sets (reps×${p.unit} @RPE)</th></tr>${sess.slice().reverse().map(s=>`<tr><td>${short(s.date)}</td><td>${s.ss.map(setTxt).join(' · ')}${s.c?`<div class="mut">${esc(s.c)}</div>`:''}</td></tr>`).join('')}</table></div>`;
+  h+=`</div><div class="card"><h3>History</h3><table class="hist"><tr><th>Date</th><th>Sets (reps×${p.unit} @RPE)</th></tr>${sess.slice().reverse().map(s=>`<tr><td>${short(s.date)}</td><td>${s.n>1&&s.ss.length==1?s.n+' sets: ':''}${s.ss.map(setTxt).join(' · ')}${s.c?`<div class="mut">${esc(s.c)}</div>`:''}</td></tr>`).join('')}</table></div>`;
   return h;
 }
 function chart(pts,d){
@@ -237,12 +248,13 @@ document.addEventListener('click',e=>{
     case 'adhoc':{const n=prompt('Workout name?');if(!n)return;p.logs.push({id:uid(),date:u.date,tid:null,name:n,done:false,comment:'',exercises:[]});u.adding=false;break}
     case 'delw':if(!confirm('Delete this workout and its logged sets?'))return;p.logs=p.logs.filter(l=>l.id!==d.w);break;
     case 'dele':if(!confirm('Remove this exercise from the day?'))return;lg.exercises.splice(+d.e,1);break;
-    case 'adde':{const n=prompt('Exercise name?');if(!n)return;lg.exercises.push({name:n.trim(),comment:'',sets:[{r:'',w:'',rpe:''},{r:'',w:'',rpe:''},{r:'',w:'',rpe:''}]});break}
+    case 'adde':{const n=prompt('Exercise name?');if(!n)return;lg.exercises.push({name:n.trim(),rx:null,n:1,done:false,comment:'',sets:[{r:'',w:'',rpe:''}]});break}
+    case 'xdone':{const x=lg.exercises[+d.e];x.done=!x.done;lg.done=lg.exercises.every(e=>e.done);break}
     case 'adds':{const ss=lg.exercises[+d.e].sets,l=ss.at(-1)||{};ss.push({r:l.r||'',w:l.w||'',rpe:''});break}
     case 'dels':lg.exercises[+d.e].sets.splice(+d.s,1);break;
     case 'newtpl':{const n=prompt('Workout name (e.g. Workout A)?');if(!n)return;p.templates.push({id:uid(),name:n.trim(),exercises:[]});break}
     case 'deltpl':if(!confirm('Delete this workout template? Already-logged days are kept.'))return;p.templates=p.templates.filter(t=>t.id!==d.t);break;
-    case 'addex':{const n=prompt('Exercise name?');if(!n)return;p.templates.find(t=>t.id===d.t).exercises.push(n.trim());break}
+    case 'addex':{const n=prompt('Exercise name?');if(!n)return;p.templates.find(t=>t.id===d.t).exercises.push(mkEx(n.trim()));break}
     case 'rmex':p.templates.find(t=>t.id===d.t).exercises.splice(+d.i,1);break;
     case 'metric':u.metric=d.m;break;
     case 'addnote':{const t=$('#newnote').value.trim();if(!t)return;p.notes.push({id:uid(),ts:Date.now(),text:t});break}
@@ -262,6 +274,8 @@ function onField(e){
   else if(f=='ec')lg.exercises[+t.dataset.e].comment=t.value;
   else if(f=='wc')lg.comment=t.value;
   else if(f=='tname')P().templates.find(x=>x.id===t.dataset.t).name=t.value;
+  else if(f=='rx')P().templates.find(x=>x.id===t.dataset.t).exercises[+t.dataset.i][t.dataset.k]=t.value;
+  else if(f=='exname')P().templates.find(x=>x.id===t.dataset.t).exercises[+t.dataset.i].name=t.value;
   else return;
   save();
 }
